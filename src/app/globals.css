@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+/*
+  Palette follows the Story Circle journey:
+  You → Change = calm teal → need (blue) → threshold (indigo/violet) → search/find (purple/rose) → take (amber) → return (gold) → change (green renewal).
+  Order = cool / structured; Chaos = warm / volatile (axis in the hole).
+*/
+:root {
+  --background: #f6f8fb;
+  --foreground: #171717;
+  --bg-gradient-mid: #eef6f4;
+  --bg-gradient-edge: #f0edf5;
+
+  --ui-accent: #0f766e;
+  --ui-accent-hover: #0d9488;
+  --ui-accent-muted: #ccfbf1;
+  --ui-accent-contrast: #ffffff;
+
+  --order-tone: #0e7490;
+  --chaos-tone: #c2410c;
+  --axis-line: #94a3b8;
+
+  --ring-you-fill: #d5ede8;
+  --ring-you-stroke: #5dac9a;
+  --ring-need-fill: #d5e5f2;
+  --ring-need-stroke: #5b8fc9;
+  --ring-go-fill: #e0dbf5;
+  --ring-go-stroke: #7c6cbd;
+  --ring-search-fill: #eadcf2;
+  --ring-search-stroke: #9b6fb0;
+  --ring-find-fill: #f0dbe8;
+  --ring-find-stroke: #be6b96;
+  --ring-take-fill: #fdeadb;
+  --ring-take-stroke: #d97757;
+  --ring-return-fill: #faf0d4;
+  --ring-return-stroke: #c9a227;
+  --ring-change-fill: #daf0e0;
+  --ring-change-stroke: #4fa86e;
+
+  --accent-you: #0f766e;
+  --accent-need: #1d4ed8;
+  --accent-go: #5b21b6;
+  --accent-search: #7c3aed;
+  --accent-find: #a21caf;
+  --accent-take: #c2410c;
+  --accent-return: #b45309;
+  --accent-change: #15803d;
+
+  --hole-fill: #fafcfb;
+  --card-surface: rgba(255, 255, 255, 0.92);
+  --card-border: rgba(15, 118, 110, 0.12);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0c0f12;
+    --foreground: #e8eaed;
+    --bg-gradient-mid: #0f1614;
+    --bg-gradient-edge: #121018;
+
+    --ui-accent: #2dd4bf;
+    --ui-accent-hover: #5eead4;
+    --ui-accent-muted: #134e4a;
+    --ui-accent-contrast: #042f2e;
+
+    --order-tone: #22d3ee;
+    --chaos-tone: #fb923c;
+    --axis-line: #64748b;
+
+    --ring-you-fill: #152a26;
+    --ring-you-stroke: #3d8f7c;
+    --ring-need-fill: #152535;
+    --ring-need-stroke: #4d7eb5;
+    --ring-go-fill: #221d36;
+    --ring-go-stroke: #7c6cbd;
+    --ring-search-fill: #271a31;
+    --ring-search-stroke: #9b6fb0;
+    --ring-find-fill: #2d1826;
+    --ring-find-stroke: #be6b96;
+    --ring-take-fill: #2a1713;
+    --ring-take-stroke: #fb923c;
+    --ring-return-fill: #2a2412;
+    --ring-return-stroke: #fbbf24;
+    --ring-change-fill: #142518;
+    --ring-change-stroke: #4ade80;
+
+    --accent-you: #2dd4bf;
+    --accent-need: #60a5fa;
+    --accent-go: #a78bfa;
+    --accent-search: #c4b5fd;
+    --accent-find: #f0abfc;
+    --accent-take: #fb923c;
+    --accent-return: #fbbf24;
+    --accent-change: #4ade80;
+
+    --hole-fill: #0e1210;
+    --card-surface: rgba(24, 28, 32, 0.85);
+    --card-border: rgba(45, 212, 191, 0.18);
+  }
+}
+
+body {
+  background: linear-gradient(
+    155deg,
+    var(--bg-gradient-edge) 0%,
+    var(--bg-gradient-mid) 38%,
+    var(--background) 62%,
+    var(--bg-gradient-edge) 100%
+  );
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Direction isolation for RTL stability; do not force text-align — script blocks use per-type alignment (centered character, etc.). */
+[contenteditable="true"] {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Some extensions/users can set RTL on the document; keep the script blocks stable. */
+[data-script-block] {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
