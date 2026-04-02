@@ -4,6 +4,7 @@ import type {
   CharacterBoardNode,
   CharacterRelation,
   Event,
+  HeroJourneyNote,
   MoodboardItem,
   Project,
   Scene,
@@ -23,6 +24,7 @@ export class StoryCircleDb extends Dexie {
   characterBoardNodes!: Table<CharacterBoardNode, string>;
   characterRelations!: Table<CharacterRelation, string>;
   scriptDocs!: Table<ScriptDoc, string>;
+  heroJourneyNotes!: Table<HeroJourneyNote, string>;
 
   constructor() {
     super("story_circle_db");
@@ -112,6 +114,20 @@ export class StoryCircleDb extends Dexie {
       characterBoardNodes: "id, projectId, characterId, zIndex, updatedAt, [projectId+characterId]",
       characterRelations: "id, projectId, fromCharacterId, toCharacterId, updatedAt, [projectId+fromCharacterId], [projectId+toCharacterId]",
       scriptDocs: "id, projectId, updatedAt, [projectId+updatedAt]",
+    });
+
+    this.version(10).stores({
+      projects: "id, updatedAt",
+      events: "id, projectId, stage, orderInStage, updatedAt, [projectId+stage]",
+      sequences: "id, projectId, order, updatedAt",
+      scenes: "id, projectId, sequenceId, order, updatedAt, [projectId+sequenceId]",
+      stageNotes: "id, projectId, stage, updatedAt, [projectId+stage]",
+      moodboardItems: "id, projectId, zIndex, updatedAt",
+      characters: "id, projectId, updatedAt, [projectId+name]",
+      characterBoardNodes: "id, projectId, characterId, zIndex, updatedAt, [projectId+characterId]",
+      characterRelations: "id, projectId, fromCharacterId, toCharacterId, updatedAt, [projectId+fromCharacterId], [projectId+toCharacterId]",
+      scriptDocs: "id, projectId, updatedAt, [projectId+updatedAt]",
+      heroJourneyNotes: "id, projectId, step, updatedAt, [projectId+step]",
     });
   }
 }

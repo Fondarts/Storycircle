@@ -49,6 +49,17 @@
   --hole-fill: #fafcfb;
   --card-surface: rgba(255, 255, 255, 0.92);
   --card-border: rgba(15, 118, 110, 0.12);
+
+  /* Hero's Journey acts (infographic: I purple, II magenta, III orange) */
+  --hj-act-1-fill: #ede9f5;
+  --hj-act-1-stroke: #6d28d9;
+  --hj-act-1-accent: #5b21b6;
+  --hj-act-2-fill: #fce7f3;
+  --hj-act-2-stroke: #db2777;
+  --hj-act-2-accent: #be185d;
+  --hj-act-3-fill: #ffedd5;
+  --hj-act-3-stroke: #ea580c;
+  --hj-act-3-accent: #c2410c;
 }
 
 @theme inline {
@@ -103,6 +114,16 @@
     --hole-fill: #0e1210;
     --card-surface: rgba(24, 28, 32, 0.85);
     --card-border: rgba(45, 212, 191, 0.18);
+
+    --hj-act-1-fill: #1e1533;
+    --hj-act-1-stroke: #a78bfa;
+    --hj-act-1-accent: #c4b5fd;
+    --hj-act-2-fill: #2d1228;
+    --hj-act-2-stroke: #f472b6;
+    --hj-act-2-accent: #f9a8d4;
+    --hj-act-3-fill: #2a1810;
+    --hj-act-3-stroke: #fb923c;
+    --hj-act-3-accent: #fdba74;
   }
 }
 

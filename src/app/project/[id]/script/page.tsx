@@ -14,6 +14,7 @@ import type { ScriptBlock, ScriptBlockType, ScriptDoc, Character } from "@/domai
 import { getOrCreateScriptDoc, toFountain, updateScriptDoc } from "@/db/repos/script";
 import { listCharacters } from "@/db/repos/characters";
 import { newId } from "@/db/ids";
+import { exportScriptBlocksToPdf } from "@/lib/exportScriptPdf";
 
 /* ── Constants ───────────────────────────────────────────────────────── */
 
@@ -513,6 +514,7 @@ export default function ScriptPage() {
   const [activeIdx, setActiveIdx] = useState(0);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [ac, setAc] = useState<ACState>(null);
   const [pagination, setPagination] = useState<{
@@ -1246,6 +1248,15 @@ export default function ScriptPage() {
     }
   }, []);
 
+  const onExportPdf = useCallback(async () => {
+    setPdfExporting(true);
+    try {
+      await exportScriptBlocksToPdf(blocksRef.current, doc?.title ?? "Script");
+    } finally {
+      setPdfExporting(false);
+    }
+  }, [doc?.title]);
+
   /* ─ Render ─ */
 
   if (!projectId) {
@@ -1315,6 +1326,14 @@ export default function ScriptPage() {
               onClick={() => void onCopyFountain()}
             >
               {copied ? "Copied" : "Copy Fountain"}
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-[color:var(--card-border)] px-2 py-1 text-[11px] hover:bg-[var(--ui-accent-muted)]/25 disabled:opacity-50"
+              disabled={pdfExporting}
+              onClick={() => void onExportPdf()}
+            >
+              {pdfExporting ? "PDF…" : "Export PDF"}
             </button>
             <span className="text-[10px] opacity-55">{saving ? "Saving…" : "Saved"}</span>
           </div>

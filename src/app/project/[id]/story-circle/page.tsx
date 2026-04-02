@@ -10,13 +10,29 @@ import { useDroppable } from "@dnd-kit/core";
 import type { Event as StoryEvent } from "@/domain/models";
 import type { StoryStage } from "@/domain/storyStage";
 import { STORY_STAGES, STORY_STAGE_LABELS } from "@/domain/storyStage";
+import {
+  CIRCLE_DIAGRAM_VARIANT_STORAGE_KEY,
+  HERO_JOURNEY_STEPS,
+  hjActAccentVar,
+  hjActRingFillVar,
+  hjActRingStrokeVar,
+  type CircleDiagramVariant,
+} from "@/domain/heroJourney";
 import { stageAccentVar } from "@/domain/storyColors";
 import { bulkUpdateEvents, createEvent, deleteEvent, listEventsForProject, updateEvent } from "@/db/repos/events";
+import {
+  heroJourneyNoteBeatState,
+  listHeroJourneyNotes,
+  upsertHeroJourneyNote,
+} from "@/db/repos/heroJourneyNotes";
 import { listStageNotes, stageNoteBeatState, upsertStageNote } from "@/db/repos/stageNotes";
 
 type StageBuckets = Record<StoryStage, StoryEvent[]>;
 
 type StageCardPos = Record<StoryStage, { x: number; y: number } | null>;
+
+/** Hero's Journey step 1–12 → normalized card position */
+type HjCardPos = Record<number, { x: number; y: number } | null>;
 
 type StageBeatState = {
   beatOptions: string[];
@@ -30,6 +46,17 @@ function emptyBeatState(): StageBeatState {
 function defaultBeatStates(): Record<StoryStage, StageBeatState> {
   return Object.fromEntries(STORY_STAGES.map((s) => [s, emptyBeatState()])) as Record<
     StoryStage,
+    StageBeatState
+  >;
+}
+
+function defaultHjCardPos(): HjCardPos {
+  return Object.fromEntries(HERO_JOURNEY_STEPS.map((s) => [s.step, null])) as HjCardPos;
+}
+
+function defaultHjBeatStates(): Record<number, StageBeatState> {
+  return Object.fromEntries(HERO_JOURNEY_STEPS.map((s) => [s.step, emptyBeatState()])) as Record<
+    number,
     StageBeatState
   >;
 }
@@ -91,8 +118,11 @@ function midpointOfClosestCardEdge(
 }
 
 function StageCard({
-  stage,
+  cardId,
+  accentVar,
+  badge,
   label,
+  showEventCount,
   eventsCount,
   beatState,
   widthPx,
@@ -102,8 +132,12 @@ function StageCard({
   onMove,
   onChangeBeatState,
 }: {
-  stage: StoryStage;
+  cardId: string;
+  /** CSS custom property name without `var()`, e.g. `--accent-you` */
+  accentVar: string;
+  badge: string;
   label: string;
+  showEventCount: boolean;
   eventsCount: number;
   beatState: StageBeatState;
   widthPx: number;
@@ -239,7 +273,7 @@ function StageCard({
           borderColor: "var(--card-border)",
           borderLeftWidth: 3,
           borderLeftStyle: "solid",
-          borderLeftColor: `var(${stageAccentVar(stage)})`,
+          borderLeftColor: `var(${accentVar})`,
         }}
         onPointerDown={(e) => {
           const target = e.target as HTMLElement | null;
@@ -288,9 +322,11 @@ function StageCard({
             <div className="text-[11px] font-semibold text-[color:var(--foreground)]">
               {label}
             </div>
-            <div className="mt-0.5 text-[11px] text-[color:var(--foreground)]/60">
-              {eventsCount} event{eventsCount === 1 ? "" : "s"}
-            </div>
+            {showEventCount ? (
+              <div className="mt-0.5 text-[11px] text-[color:var(--foreground)]/60">
+                {eventsCount} event{eventsCount === 1 ? "" : "s"}
+              </div>
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <button
@@ -318,9 +354,9 @@ function StageCard({
             </button>
             <div
               className="text-[10px] font-medium"
-              style={{ color: `var(${stageAccentVar(stage)})` }}
+              style={{ color: `var(${accentVar})` }}
             >
-              {stage}
+              {badge}
             </div>
           </div>
         </div>
@@ -336,7 +372,7 @@ function StageCard({
               className="flex w-full items-center justify-between gap-2 rounded-lg border border-[color:var(--card-border)] bg-[var(--hole-fill)] px-2 py-1.5 text-left text-[10px] font-medium text-[color:var(--foreground)]/85 hover:bg-[var(--ui-accent-muted)]/20"
               style={{
                 borderLeftWidth: 3,
-                borderLeftColor: `var(${stageAccentVar(stage)})`,
+                borderLeftColor: `var(${accentVar})`,
               }}
               aria-expanded={menuOpen}
               aria-haspopup="listbox"
@@ -354,7 +390,7 @@ function StageCard({
               <ul
                 className="absolute left-0 right-0 top-full z-20 mt-0.5 max-h-44 overflow-auto rounded-lg border border-[color:var(--card-border)] bg-[var(--card-surface)] py-1 shadow-lg backdrop-blur-md"
                 role="listbox"
-                aria-label={`Beat options for ${stage}`}
+                aria-label={`Beat options for ${label}`}
               >
                 {beatOptions.map((opt, i) => (
                   <li key={i} role="none" className="flex items-start gap-0.5 pr-1">
@@ -374,7 +410,7 @@ function StageCard({
                     >
                       <span
                         className="mt-0.5 inline-flex h-4 min-w-5 items-center justify-center rounded bg-[var(--hole-fill)] text-[9px] tabular-nums"
-                        style={{ color: `var(${stageAccentVar(stage)})` }}
+                        style={{ color: `var(${accentVar})` }}
                       >
                         {i + 1}
                       </span>
@@ -421,7 +457,7 @@ function StageCard({
               className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6"
               role="dialog"
               aria-modal="true"
-              aria-labelledby={`expand-title-${stage}`}
+              aria-labelledby={`expand-title-${cardId}`}
             >
               <button
                 type="button"
@@ -431,16 +467,19 @@ function StageCard({
               />
               <div
                 className="relative z-10 flex max-h-[min(90dvh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[color:var(--card-border)] bg-[var(--card-surface)] shadow-2xl"
-                style={{ borderLeftWidth: 4, borderLeftColor: `var(${stageAccentVar(stage)})` }}
+                style={{ borderLeftWidth: 4, borderLeftColor: `var(${accentVar})` }}
                 onPointerDown={(e) => e.stopPropagation()}
               >
                 <div className="flex items-start justify-between gap-3 border-b border-[color:var(--card-border)] px-4 py-3">
                   <div className="min-w-0">
-                    <h2 id={`expand-title-${stage}`} className="text-sm font-semibold">
+                    <h2 id={`expand-title-${cardId}`} className="text-sm font-semibold">
                       {label}
                     </h2>
                     <p className="mt-0.5 text-[11px] opacity-60">
-                      {stage} · {eventsCount} event{eventsCount === 1 ? "" : "s"}
+                      {badge}
+                      {showEventCount
+                        ? ` · ${eventsCount} event${eventsCount === 1 ? "" : "s"}`
+                        : " · Hero's journey"}
                     </p>
                   </div>
                   <button
@@ -491,7 +530,7 @@ function StageCard({
                             >
                               <span
                                 className="mt-0.5 tabular-nums"
-                                style={{ color: `var(${stageAccentVar(stage)})` }}
+                                style={{ color: `var(${accentVar})` }}
                               >
                                 {i + 1}.
                               </span>
@@ -686,7 +725,7 @@ function StoryCircleDiagram({
               stroke="var(--card-border)"
               strokeWidth={Math.max(1, minDim * 0.0012)}
             />
-            {/* Order (top) / Chaos (bottom) — horizontal dashed axis in the hole */}
+            {/* Order (top) / Chaos (bottom) */}
             <line
               x1={cx - rHole}
               y1={cy}
@@ -803,8 +842,11 @@ function StoryCircleDiagram({
             return (
               <StageCard
                 key={`${stage}-card`}
-                stage={stage}
+                cardId={stage}
+                accentVar={stageAccentVar(stage)}
+                badge={stage}
                 label={STORY_STAGE_LABELS[stage]}
+                showEventCount
                 eventsCount={buckets[stage]?.length ?? 0}
                 beatState={stageBeatStates[stage] ?? emptyBeatState()}
                 widthPx={cardWpx}
@@ -824,6 +866,267 @@ function StoryCircleDiagram({
               />
             );
           })}
+      </div>
+    </div>
+  );
+}
+
+function HeroesJourneyDiagram({
+  hjBeatStates,
+  onChangeHjBeats,
+  hjCardPos,
+  onChangeHjCardPos,
+}: {
+  hjBeatStates: Record<number, StageBeatState>;
+  onChangeHjBeats: (step: number, next: StageBeatState) => void;
+  hjCardPos: HjCardPos;
+  onChangeHjCardPos: (step: number, pos: { x: number; y: number }) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [rect, setRect] = useState<{ w: number; h: number }>({ w: 1, h: 1 });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (!r) return;
+      setRect({ w: Math.max(1, r.width), h: Math.max(1, r.height) });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const w = Math.max(1, rect.w);
+  const h = Math.max(1, rect.h);
+  const cx = w / 2;
+  const cy = h / 2;
+  const minDim = Math.min(w, h);
+  const rOuter = minDim * 0.29;
+  const rInner = minDim * 0.2;
+  const rimPadding = minDim * 0.006;
+  const defaultCardRadius = rOuter + minDim * 0.26;
+  const rHole = Math.max(rInner - minDim * 0.01, 1);
+  const stageLabelFont = Math.max(7, Math.round(minDim * 0.014));
+  const stepNumFont = Math.max(7, Math.round(minDim * 0.012));
+  const axisLabelFont = Math.max(7, Math.round(minDim * 0.013));
+  const hjTitleFont = Math.max(9, Math.round(minDim * 0.016));
+  const start = -Math.PI / 2;
+  const stepAngle = (2 * Math.PI) / HERO_JOURNEY_STEPS.length;
+
+  function layoutForStep(step: number, index: number) {
+    const aMid = start + (index + 0.5) * stepAngle;
+    const saved = hjCardPos[step];
+    const idealCenter = saved
+      ? { x: saved.x * w, y: saved.y * h }
+      : polar(cx, cy, defaultCardRadius, aMid);
+    const cardWpx = Math.max(180, Math.min(280, w * 0.19));
+    const cardHpx = Math.max(120, Math.min(170, h * 0.16));
+    const padPx = 10;
+    const minX = padPx + cardWpx / 2;
+    const maxX = w - padPx - cardWpx / 2;
+    const minY = padPx + cardHpx / 2;
+    const maxY = h - padPx - cardHpx / 2;
+    const clampedPx = {
+      x: Math.min(maxX, Math.max(minX, idealCenter.x)),
+      y: Math.min(maxY, Math.max(minY, idealCenter.y)),
+    };
+    return { aMid, clampedPx, cardWpx, cardHpx, minX, maxX, minY, maxY };
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative min-h-0 flex-1 w-full overflow-hidden"
+    >
+      <div className="absolute inset-0">
+        <svg
+          viewBox={`0 0 ${w} ${h}`}
+          className="absolute inset-0 h-full w-full"
+          role="img"
+          aria-label="The Hero's Journey diagram"
+        >
+          <defs>
+            <radialGradient id="hjRingGlow" cx="50%" cy="50%" r="60%">
+              <stop offset="0%" stopColor="rgba(255,255,255,0.0)" />
+              <stop offset="100%" stopColor="rgba(0,0,0,0.05)" />
+            </radialGradient>
+          </defs>
+
+          {HERO_JOURNEY_STEPS.map((def, i) => {
+            const a0 = start + i * stepAngle;
+            const a1 = a0 + stepAngle;
+            const path = donutWedgePath(cx, cy, rOuter, rInner, a0, a1);
+            return (
+              <path
+                key={def.step}
+                d={path}
+                fill={`var(${hjActRingFillVar(def.act)})`}
+                stroke={`var(${hjActRingStrokeVar(def.act)})`}
+                strokeWidth={Math.max(1, minDim * 0.0015)}
+              />
+            );
+          })}
+
+          <circle
+            cx={cx}
+            cy={cy}
+            r={rHole}
+            fill="var(--hole-fill)"
+            stroke="var(--card-border)"
+            strokeWidth={Math.max(1, minDim * 0.0012)}
+          />
+          <line
+            x1={cx - rHole}
+            y1={cy}
+            x2={cx + rHole}
+            y2={cy}
+            stroke="var(--axis-line)"
+            strokeWidth={Math.max(1, minDim * 0.0025)}
+            strokeDasharray={`${Math.round(minDim * 0.014)} ${Math.round(minDim * 0.01)}`}
+            strokeLinecap="round"
+            opacity={0.85}
+          />
+          <text
+            x={cx}
+            y={cy - rHole * 0.38}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="var(--order-tone)"
+            style={{
+              fontSize: axisLabelFont,
+              fontWeight: 600,
+              textRendering: "geometricPrecision",
+            }}
+          >
+            Known
+          </text>
+          <text
+            x={cx}
+            y={cy + rHole * 0.34}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="var(--chaos-tone)"
+            style={{
+              fontSize: axisLabelFont,
+              fontWeight: 600,
+              textRendering: "geometricPrecision",
+            }}
+          >
+            Unknown
+          </text>
+          <text
+            x={cx}
+            y={cy - rHole * 0.08}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="var(--foreground)"
+            opacity={0.88}
+            style={{
+              fontSize: hjTitleFont,
+              fontWeight: 700,
+              textRendering: "geometricPrecision",
+            }}
+          >
+            The Hero&apos;s Journey
+          </text>
+          <circle cx={cx} cy={cy} r={rOuter} fill="url(#hjRingGlow)" opacity={0.8} />
+
+          {HERO_JOURNEY_STEPS.map((def, i) => {
+            const aMid = start + (i + 0.5) * stepAngle;
+            const labelPos = polar(cx, cy, (rOuter + rInner) / 2, aMid);
+            return (
+              <g key={`hj-label-${def.step}`}>
+                <text
+                  x={Math.round(labelPos.x * 2) / 2}
+                  y={Math.round(labelPos.y * 2) / 2}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="select-none font-semibold"
+                  fill={`var(${hjActAccentVar(def.act)})`}
+                  style={{
+                    fontSize: stageLabelFont,
+                    textRendering: "geometricPrecision",
+                  }}
+                >
+                  {def.ringLabel}
+                </text>
+                <text
+                  x={Math.round(labelPos.x * 2) / 2}
+                  y={Math.round(labelPos.y * 2) / 2 + stageLabelFont * 0.85 + 3}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="select-none"
+                  fill="var(--foreground)"
+                  opacity={0.45}
+                  style={{
+                    fontSize: stepNumFont,
+                    textRendering: "geometricPrecision",
+                  }}
+                >
+                  {def.step}
+                </text>
+              </g>
+            );
+          })}
+
+          {HERO_JOURNEY_STEPS.map((def, i) => {
+            const { aMid, clampedPx, cardWpx, cardHpx } = layoutForStep(def.step, i);
+            const pFrom = polar(cx, cy, rOuter + rimPadding, aMid);
+            const rectCard = {
+              x: clampedPx.x - cardWpx / 2,
+              y: clampedPx.y - cardHpx / 2,
+              w: cardWpx,
+              h: cardHpx,
+            };
+            const pTo = midpointOfClosestCardEdge(rectCard, pFrom);
+            const sw = Math.max(1.5, minDim * 0.0035);
+            return (
+              <path
+                key={`hj-leader-${def.step}`}
+                d={`M ${pFrom.x} ${pFrom.y} L ${pTo.x} ${pTo.y}`}
+                stroke={`var(${hjActAccentVar(def.act)})`}
+                strokeWidth={sw}
+                strokeLinecap="round"
+                fill="none"
+                opacity={0.38}
+              />
+            );
+          })}
+        </svg>
+
+        {HERO_JOURNEY_STEPS.map((def, i) => {
+          const { clampedPx, cardWpx, cardHpx, minX, maxX, minY, maxY } = layoutForStep(
+            def.step,
+            i,
+          );
+          return (
+            <StageCard
+              key={`hj-${def.step}-card`}
+              cardId={`hj-${def.step}`}
+              accentVar={hjActAccentVar(def.act)}
+              badge={String(def.step)}
+              label={def.title}
+              showEventCount={false}
+              eventsCount={0}
+              beatState={hjBeatStates[def.step] ?? emptyBeatState()}
+              widthPx={cardWpx}
+              leftPct={(clampedPx.x / w) * 100}
+              topPct={(clampedPx.y / h) * 100}
+              bounds={{
+                minX,
+                maxX,
+                minY,
+                maxY,
+                rectW: w,
+                rectH: h,
+                currentPx: clampedPx,
+              }}
+              onMove={(pos01) => onChangeHjCardPos(def.step, pos01)}
+              onChangeBeatState={(next) => onChangeHjBeats(def.step, next)}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -1037,13 +1340,39 @@ export default function StoryCirclePage({
     Return: null,
     Change: null,
   }));
+  const [hjBeatStates, setHjBeatStates] = useState<Record<number, StageBeatState>>(
+    () => defaultHjBeatStates(),
+  );
+  const [hjCardPos, setHjCardPos] = useState<HjCardPos>(() => defaultHjCardPos());
+  const [diagramVariant, setDiagramVariant] = useState<CircleDiagramVariant>("story-circle");
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(CIRCLE_DIAGRAM_VARIANT_STORAGE_KEY);
+      if (v === "heroes-journey" || v === "story-circle") setDiagramVariant(v);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function persistDiagramVariant(next: CircleDiagramVariant) {
+    setDiagramVariant(next);
+    try {
+      localStorage.setItem(CIRCLE_DIAGRAM_VARIANT_STORAGE_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
     (async () => {
-      const evts = await listEventsForProject(projectId);
-      const notes = await listStageNotes(projectId);
+      const [evts, notes, hjNotes] = await Promise.all([
+        listEventsForProject(projectId),
+        listStageNotes(projectId),
+        listHeroJourneyNotes(projectId),
+      ]);
       if (cancelled) return;
       setBuckets(bucketize(evts));
       setStageBeatStates(() => {
@@ -1058,6 +1387,29 @@ export default function StoryCirclePage({
         for (const n of notes) {
           if (typeof n.cardX === "number" && typeof n.cardY === "number") {
             next[n.stage] = { x: n.cardX, y: n.cardY };
+          }
+        }
+        return next;
+      });
+      setHjBeatStates(() => {
+        const next = defaultHjBeatStates();
+        for (const n of hjNotes) {
+          if (n.step >= 1 && n.step <= 12) {
+            next[n.step] = heroJourneyNoteBeatState(n);
+          }
+        }
+        return next;
+      });
+      setHjCardPos(() => {
+        const next = defaultHjCardPos();
+        for (const n of hjNotes) {
+          if (
+            n.step >= 1 &&
+            n.step <= 12 &&
+            typeof n.cardX === "number" &&
+            typeof n.cardY === "number"
+          ) {
+            next[n.step] = { x: n.cardX, y: n.cardY };
           }
         }
         return next;
@@ -1089,6 +1441,28 @@ export default function StoryCirclePage({
     }, 500);
     return () => clearTimeout(t);
   }, [projectId, stageBeatStates, cardPos]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    const t = setTimeout(() => {
+      void (async () => {
+        for (const def of HERO_JOURNEY_STEPS) {
+          const step = def.step;
+          const bs = hjBeatStates[step] ?? emptyBeatState();
+          const pos = hjCardPos[step];
+          await upsertHeroJourneyNote({
+            projectId,
+            step,
+            beatOptions: bs.beatOptions,
+            activeBeatIndex: bs.activeBeatIndex,
+            cardX: pos?.x ?? null,
+            cardY: pos?.y ?? null,
+          });
+        }
+      })();
+    }, 500);
+    return () => clearTimeout(t);
+  }, [projectId, hjBeatStates, hjCardPos]);
 
   const allEvents = useMemo(() => {
     const out: StoryEvent[] = [];
@@ -1161,17 +1535,69 @@ export default function StoryCirclePage({
             Missing project id in the URL.
           </div>
         ) : (
-          <StoryCircleDiagram
-            buckets={buckets}
-            stageBeatStates={stageBeatStates}
-            onChangeStageBeats={(stage, next) =>
-              setStageBeatStates((prev) => ({ ...prev, [stage]: next }))
-            }
-            cardPos={cardPos}
-            onChangeCardPos={(stage, pos01) =>
-              setCardPos((prev) => ({ ...prev, [stage]: pos01 }))
-            }
-          />
+          <>
+            <div className="flex flex-wrap items-center gap-2 border-b border-[color:var(--card-border)]/50 bg-[var(--card-surface)]/80 px-3 py-2 backdrop-blur-md">
+              <span className="text-xs font-medium opacity-70">Diagram</span>
+              <div
+                className="flex rounded-lg border border-[color:var(--card-border)] bg-[var(--hole-fill)] p-0.5"
+                role="group"
+                aria-label="Circle diagram type"
+              >
+                <button
+                  type="button"
+                  className={[
+                    "rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors",
+                    diagramVariant === "story-circle"
+                      ? "bg-[var(--ui-accent-muted)]/40 text-[color:var(--foreground)]"
+                      : "text-[color:var(--foreground)]/65 hover:bg-[var(--ui-accent-muted)]/20",
+                  ].join(" ")}
+                  onClick={() => persistDiagramVariant("story-circle")}
+                >
+                  Story circle
+                </button>
+                <button
+                  type="button"
+                  className={[
+                    "rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors",
+                    diagramVariant === "heroes-journey"
+                      ? "bg-[var(--ui-accent-muted)]/40 text-[color:var(--foreground)]"
+                      : "text-[color:var(--foreground)]/65 hover:bg-[var(--ui-accent-muted)]/20",
+                  ].join(" ")}
+                  onClick={() => persistDiagramVariant("heroes-journey")}
+                >
+                  Hero&apos;s journey
+                </button>
+              </div>
+              <span className="max-w-[min(100%,28rem)] text-[10px] opacity-50">
+                Story Circle: 8 stages tied to events. Hero&apos;s Journey: 12 steps with its own
+                notes—frameworks are separate.
+              </span>
+            </div>
+            {diagramVariant === "heroes-journey" ? (
+              <HeroesJourneyDiagram
+                hjBeatStates={hjBeatStates}
+                onChangeHjBeats={(step, next) =>
+                  setHjBeatStates((prev) => ({ ...prev, [step]: next }))
+                }
+                hjCardPos={hjCardPos}
+                onChangeHjCardPos={(step, pos01) =>
+                  setHjCardPos((prev) => ({ ...prev, [step]: pos01 }))
+                }
+              />
+            ) : (
+              <StoryCircleDiagram
+                buckets={buckets}
+                stageBeatStates={stageBeatStates}
+                onChangeStageBeats={(stage, next) =>
+                  setStageBeatStates((prev) => ({ ...prev, [stage]: next }))
+                }
+                cardPos={cardPos}
+                onChangeCardPos={(stage, pos01) =>
+                  setCardPos((prev) => ({ ...prev, [stage]: pos01 }))
+                }
+              />
+            )}
+          </>
         )}
       </div>
     </div>

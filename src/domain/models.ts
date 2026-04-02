@@ -172,3 +172,17 @@ export type StageNote = {
   updatedAt: ISODateString;
 };
 
+/** Hero's Journey diagram: 12 steps, independent from Story Circle stages. */
+export type HeroJourneyNote = {
+  id: Id; // `${projectId}:hj:${step}`
+  projectId: Id;
+  /** 1–12, matches `HERO_JOURNEY_STEPS` */
+  step: number;
+  text: string;
+  beatOptions?: string[];
+  activeBeatIndex?: number;
+  cardX: number | null;
+  cardY: number | null;
+  updatedAt: ISODateString;
+};
+

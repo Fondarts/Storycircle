@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useWorkspace } from "@/components/WorkspaceProvider";
+import { supportsFileSystemAccess } from "@/lib/workspaceFileSync";
 
 function projectIdFromPath(pathname: string | null): string | null {
   if (!pathname) return null;
@@ -14,6 +16,7 @@ export function AppMenu() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const projectId = projectIdFromPath(pathname);
+  const ws = useWorkspace();
 
   useEffect(() => {
     setOpen(false);
@@ -62,14 +65,18 @@ export function AppMenu() {
           />
           <nav
             id="app-drawer"
-            className="absolute right-0 top-0 flex h-full w-[min(100%,20rem)] flex-col border-l border-[color:var(--card-border)] bg-[var(--card-surface)] shadow-2xl backdrop-blur-md"
+            className="absolute right-0 top-0 flex h-full min-h-0 w-[min(100%,20rem)] flex-col border-l border-[color:var(--card-border)] bg-[var(--card-surface)] shadow-2xl backdrop-blur-md"
           >
             <div className="border-b border-[color:var(--card-border)] px-4 py-4 pt-16">
-              <div className="text-xs font-medium uppercase tracking-wide opacity-55">
+              <div className="text-sm font-semibold text-[color:var(--foreground)]">
+                Story Circle{" "}
+                <span className="font-mono text-[11px] font-normal opacity-50">V0.1</span>
+              </div>
+              <div className="mt-2 text-xs font-medium uppercase tracking-wide opacity-55">
                 Navigation
               </div>
             </div>
-            <ul className="flex flex-col gap-1 p-3">
+            <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
               <li>
                 <Link
                   href="/"
@@ -138,6 +145,75 @@ export function AppMenu() {
                 </>
               ) : null}
             </ul>
+            <div className="mt-auto border-t border-[color:var(--card-border)] p-3">
+              <div className="px-3 pb-2 text-xs font-medium uppercase tracking-wide opacity-55">
+                Data
+              </div>
+              {ws.isFileWorkspace ? (
+                <>
+                  <p className="px-3 pb-2 text-[11px] leading-snug opacity-70">
+                    Folder: <span className="font-medium opacity-90">{ws.folderName ?? "—"}</span>
+                    <br />
+                    <span className="opacity-60">story-circle-data.json</span>
+                  </p>
+                  <button
+                    type="button"
+                    className="mb-1 w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--ui-accent-muted)]/30"
+                    onClick={() => {
+                      void ws.pickOrChangeFolder();
+                      setOpen(false);
+                    }}
+                  >
+                    Change folder…
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--ui-accent-muted)]/30"
+                    onClick={() => void ws.saveNow()}
+                  >
+                    Save to disk now
+                  </button>
+                </>
+              ) : ws.mode === "idb_only" && supportsFileSystemAccess() ? (
+                <>
+                  <p className="px-3 pb-2 text-[11px] leading-snug opacity-70">
+                    Data is in the browser until you choose a folder. Then everything syncs to{" "}
+                    <span className="opacity-80">story-circle-data.json</span> in that folder.
+                  </p>
+                  <button
+                    type="button"
+                    className="mb-1 w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--ui-accent-muted)]/30"
+                    onClick={() => {
+                      void ws.pickOrChangeFolder();
+                      setOpen(false);
+                    }}
+                  >
+                    Choose folder…
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--ui-accent-muted)]/30"
+                    onClick={() => void ws.downloadJsonBackup()}
+                  >
+                    Download JSON backup
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="px-3 pb-2 text-[11px] leading-snug opacity-70">
+                    This browser cannot pick a folder. Data stays in the browser (IndexedDB). Use Chrome or Edge for
+                    file-based storage.
+                  </p>
+                  <button
+                    type="button"
+                    className="mb-1 w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--ui-accent-muted)]/30"
+                    onClick={() => void ws.downloadJsonBackup()}
+                  >
+                    Download JSON backup
+                  </button>
+                </>
+              )}
+            </div>
           </nav>
         </div>
       ) : null}

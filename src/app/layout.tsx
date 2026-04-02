@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { AppMenu } from "@/components/AppMenu";
+import { WorkspaceProvider } from "@/components/WorkspaceProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Story Circle",
+  title: "Story Circle · V0.1",
   description: "Outline screenplays with a Story Circle and beat outline.",
 };
 
@@ -31,8 +31,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-dvh antialiased`}
     >
       <body dir="ltr" suppressHydrationWarning className="flex min-h-0 h-dvh flex-col">
-        <AppMenu />
-        {children}
+        <WorkspaceProvider>{children}</WorkspaceProvider>
       </body>
     </html>
   );
